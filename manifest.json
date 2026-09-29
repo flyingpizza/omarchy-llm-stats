@@ -1,0 +1,81 @@
+{
+  "schemaVersion": 1,
+  "id": "flyingpizza.llm-stats",
+  "name": "LLM Stats",
+  "version": "2026.09.29",
+  "author": "flyingpizza",
+  "license": "MIT",
+  "description": "Real-time token generation speed from llama.cpp server using /slots endpoint — prompt & decode throughput with emoji states.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "activation": "on-demand",
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "LLM Stats",
+    "description": "Live token generation speed from llama.cpp /slots — prompt & decode throughput with emoji states.",
+    "category": "AI",
+    "aliases": [
+      "llm",
+      "tokens",
+      "speed",
+      "ai-stats"
+    ],
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "serverUrl": "http://localhost:8080",
+      "refreshIntervalSec": 2,
+      "showPrompt": true,
+      "showDecode": true,
+      "compact": true
+    },
+    "schema": [
+      {
+        "key": "serverUrl",
+        "type": "string",
+        "label": "llama.cpp server URL",
+        "defaultValue": "http://localhost:8080",
+        "description": "Base URL of the running llama-server instance."
+      },
+      {
+        "key": "refreshIntervalSec",
+        "type": "integer",
+        "label": "Refresh interval (seconds)",
+        "min": 1,
+        "max": 30,
+        "step": 1,
+        "defaultValue": 2,
+        "description": "How often to poll the server slots endpoint."
+      },
+      {
+        "key": "showPrompt",
+        "type": "enum",
+        "label": "Show prompt speed",
+        "options": ["On", "Off"],
+        "defaultValue": "On"
+      },
+      {
+        "key": "showDecode",
+        "type": "enum",
+        "label": "Show decode speed",
+        "options": ["On", "Off"],
+        "defaultValue": "On"
+      },
+      {
+        "key": "compact",
+        "type": "enum",
+        "label": "Compact display",
+        "options": ["On", "Off"],
+        "defaultValue": "On",
+        "description": "Compact shows '99p 30d', full shows '99p/s 30t/s'."
+      }
+    ],
+    "hasPanel": true
+  },
+  "settings": {
+    "compact": "On"
+  }
+}

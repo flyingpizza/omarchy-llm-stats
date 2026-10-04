@@ -4,6 +4,7 @@
 
 import QtQuick 2.15
 import Quickshell 1.0
+import Quickshell.Io
 import "../Model.js" as Model
 
 // Panel — detail view opened on click
@@ -20,42 +21,31 @@ Process {
         Model.fileUrlToPath(%pluginDir%/collect.py),
         "--server-url", settings.serverUrl || "http://localhost:5802"
     ]
-    // Refresh interval from settings
-    interval: (Number(settings.refreshIntervalSec) || 2) * 1000
-    running: true
-    onExited: { restartTimer.start() }
+    stdout: StdioCollector {
+        waitForEnd: true
+        onStreamFinished: function(text) {
+            var raw = text
+            if (!raw.trim()) return
 
-    // Output is JSON from collect.py
-    onStdoutChanged: {
-        var raw = stdoutString
-        if (!raw.trim()) return
-
-        var snapshot = Model.parseSnapshot(raw)
-        if (snapshot && snapshot.ok) {
-            barData = snapshot
-        } else {
-            barData = Model.emptySnapshot()
-            barData.error = snapshot?.error || "Server unreachable"
+            var snapshot = Model.parseSnapshot(raw)
+            if (snapshot && snapshot.ok) {
+                barData = snapshot
+            } else {
+                barData = Model.emptySnapshot()
+                barData.error = snapshot?.error || "Server unreachable"
+            }
         }
     }
 
-    // Poll every 2s to update barData
     Timer {
         id: timer
-        interval: 2000
+        interval: (Number(settings.refreshIntervalSec) || 2) * 1000
         running: true
-        triggered: {
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
             barData = Model.getCompactBarData(barData, settings);
         }
-    }
-
-    // Restart on crash
-    Timer {
-        id: restartTimer
-        interval: 3000
-        running: false
-        repeat: false
-        onTriggered: { statsProcess.start() }
     }
 }
 

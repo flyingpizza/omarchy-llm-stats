@@ -3,6 +3,7 @@
 
 import QtQuick 2.15
 import Quickshell 1.0
+import Quickshell.Io
 import "../Model.js" as Model
 
 Quickshell.Panel {
@@ -153,51 +154,39 @@ Process {
         Model.fileUrlToPath(%pluginDir%/collect.py),
         "--server-url", root.serverUrl || "http://localhost:5802"
     ]
-    interval: 2000
-    running: true
-    onExited: { restartTimer.start() }
+    stdout: StdioCollector {
+        waitForEnd: true
+        onStreamFinished: function(text) {
+            var raw = text
+            if (!raw.trim()) return
 
-    onStdoutChanged: {
-        var raw = stdoutString
-        if (!raw.trim()) return
-
-        var data = JSON.parse(raw)
-        root.data = Model.panelData(data, {
-            showPrompt: root.showPrompt || "On",
-            showDecode: root.showDecode || "On"
-        })
-        // Update currentValue from prompt_speed or decode_speed
-        if (data.prompt_speed !== undefined && data.prompt_speed >= 0) {
-            currentValue = data.prompt_speed
-            // Update maximumValue if this is higher
-            if (currentValue > maximumValue) {
-                maximumValue = currentValue
-            }
-        } else if (data.decode_speed !== undefined && data.decode_speed >= 0) {
-            currentValue = data.decode_speed
-            if (currentValue > maximumValue) {
-                maximumValue = currentValue
+            var data = JSON.parse(raw)
+            root.data = Model.panelData(data, {
+                showPrompt: root.showPrompt || "On",
+                showDecode: root.showDecode || "On"
+            })
+            if (data.prompt_speed !== undefined && data.prompt_speed >= 0) {
+                currentValue = data.prompt_speed
+                if (currentValue > maximumValue) {
+                    maximumValue = currentValue
+                }
+            } else if (data.decode_speed !== undefined && data.decode_speed >= 0) {
+                currentValue = data.decode_speed
+                if (currentValue > maximumValue) {
+                    maximumValue = currentValue
+                }
             }
         }
     }
 
-    // Timer to poll every 2s (same as BarWidget)
     Timer {
         id: timer
         interval: 2000
         running: true
-        triggered: {
-            // Refresh the process output
-            statsProcess.write("refresh")
+        repeat: true
+        triggeredOnStart: true
+        onTriggered: {
+            statsProcess.start()
         }
-    }
-
-    // Restart on crash
-    Timer {
-        id: restartTimer
-        interval: 3000
-        running: false
-        repeat: false
-        onTriggered: { statsProcess.start() }
     }
 }

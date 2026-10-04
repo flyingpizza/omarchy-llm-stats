@@ -18,7 +18,7 @@ Process {
     command: [
         "python3",
         Model.fileUrlToPath(%pluginDir%/collect.py),
-        "--server-url", settings.serverUrl || "http://localhost:8080"
+        "--server-url", settings.serverUrl || "http://localhost:5802"
     ]
     // Refresh interval from settings
     interval: (Number(settings.refreshIntervalSec) || 2) * 1000
@@ -80,7 +80,7 @@ Quickshell.BarWidget {
 
     // Click opens detail panel
     onClicked: {
-        panel.serverUrl = settings.serverUrl || "http://localhost:8080"
+        panel.serverUrl = settings.serverUrl || "http://localhost:5802"
         panel.data = Model.panelData(root.barData, {
             showPrompt: settings.showPrompt ?? "On",
             showDecode: settings.showDecode ?? "On"

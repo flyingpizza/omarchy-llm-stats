@@ -13,7 +13,7 @@ Quickshell.Panel {
     alignment: Qt.AlignHCenter
 
     property var data: []
-    property string serverUrl: "http://localhost:8080"
+    property string serverUrl: "http://localhost:5802"
 
     // Properties to display current/maximum speed from the collect.py process
     property number currentValue: 0
@@ -151,7 +151,7 @@ Process {
     command: [
         "python3",
         Model.fileUrlToPath(%pluginDir%/collect.py),
-        "--server-url", root.serverUrl || "http://localhost:8080"
+        "--server-url", root.serverUrl || "http://localhost:5802"
     ]
     interval: 2000
     running: true

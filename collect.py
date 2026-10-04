@@ -6,7 +6,7 @@ Polls /slots twice (1 second apart) to calculate prompt and decode token speeds
 from the delta in token counts. Outputs JSON to stdout for the Quickshell bar widget.
 
 Usage: python3 collect.py [--server-url URL] [--interval SECONDS]
-Defaults to http://localhost:8080 with 2 second polling
+Defaults to http://localhost:5802 with 2 second polling
 """
 
 import json
@@ -115,7 +115,7 @@ def collect(server_url: str, interval: float = 2.0) -> dict:
 
 
 def main():
-    server_url = "http://localhost:8080"
+    server_url = "http://localhost:5802"
     interval = 2.0
 
     # Parse command-line args

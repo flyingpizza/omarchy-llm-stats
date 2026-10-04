@@ -7,7 +7,7 @@ import Quickshell 1.0
 import "../Model.js" as Model
 
 // Panel — detail view opened on click
-Panel {
+Quickshell.Panel {
     id: panel
     // Panel dimensions and positioning are defined in Panel.qml
 }
@@ -36,6 +36,16 @@ Process {
         } else {
             barData = Model.emptySnapshot()
             barData.error = snapshot?.error || "Server unreachable"
+        }
+    }
+
+    // Poll every 2s to update barData
+    Timer {
+        id: timer
+        interval: 2000
+        running: true
+        triggered: {
+            barData = Model.getCompactBarData(barData, settings);
         }
     }
 
@@ -70,6 +80,7 @@ Quickshell.BarWidget {
 
     // Click opens detail panel
     onClicked: {
+        panel.serverUrl = settings.serverUrl || "http://localhost:8080"
         panel.data = Model.panelData(root.barData, {
             showPrompt: settings.showPrompt ?? "On",
             showDecode: settings.showDecode ?? "On"

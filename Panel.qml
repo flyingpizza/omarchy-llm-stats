@@ -13,6 +13,13 @@ Quickshell.Panel {
     alignment: Qt.AlignHCenter
 
     property var data: []
+    property string serverUrl: "http://localhost:8080"
+
+    // Properties to display current/maximum speed from the collect.py process
+    property number currentValue: 0
+    property number maximumValue: 1
+    property string showPrompt: "On"
+    property string showDecode: "On"
 
     Column {
         anchors {
@@ -36,7 +43,7 @@ Quickshell.Panel {
             }
         }
 
-        Divider { anchors { top: parent.top; left: parent.left; right: parent.right; topMargin: 8 } }
+        Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.topMargin: 8 }
 
         // Model info
         Row {
@@ -76,7 +83,7 @@ Quickshell.Panel {
             }
         }
 
-        Divider { anchors { top: "Uptime".bottom; left: parent.left; right: parent.right; topMargin: 8 } }
+        Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.topMargin: 8 }
 
         // Prompt stats
         Label {
@@ -104,7 +111,7 @@ Quickshell.Panel {
             }
         }
 
-        Divider { anchors { top: "Speed".bottom; left: parent.left; right: parent.right; topMargin: 8 } }
+        Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.topMargin: 8 }
 
         // Decode stats
         Label {
@@ -135,5 +142,62 @@ Quickshell.Panel {
 
     Component.onCompleted: {
         // Data is passed in via onClicked handler on the bar widget
+    }
+}
+
+// Process to run collect.py and poll its JSON output
+Process {
+    id: statsProcess
+    command: [
+        "python3",
+        Model.fileUrlToPath(%pluginDir%/collect.py),
+        "--server-url", root.serverUrl || "http://localhost:8080"
+    ]
+    interval: 2000
+    running: true
+    onExited: { restartTimer.start() }
+
+    onStdoutChanged: {
+        var raw = stdoutString
+        if (!raw.trim()) return
+
+        var data = JSON.parse(raw)
+        root.data = Model.panelData(data, {
+            showPrompt: root.showPrompt || "On",
+            showDecode: root.showDecode || "On"
+        })
+        // Update currentValue from prompt_speed or decode_speed
+        if (data.prompt_speed !== undefined && data.prompt_speed >= 0) {
+            currentValue = data.prompt_speed
+            // Update maximumValue if this is higher
+            if (currentValue > maximumValue) {
+                maximumValue = currentValue
+            }
+        } else if (data.decode_speed !== undefined && data.decode_speed >= 0) {
+            currentValue = data.decode_speed
+            if (currentValue > maximumValue) {
+                maximumValue = currentValue
+            }
+        }
+    }
+
+    // Timer to poll every 2s (same as BarWidget)
+    Timer {
+        id: timer
+        interval: 2000
+        running: true
+        triggered: {
+            // Refresh the process output
+            statsProcess.write("refresh")
+        }
+    }
+
+    // Restart on crash
+    Timer {
+        id: restartTimer
+        interval: 3000
+        running: false
+        repeat: false
+        onTriggered: { statsProcess.start() }
     }
 }

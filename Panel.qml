@@ -1,192 +1,123 @@
-// LLM Stats — Detail panel opened on click
-// Shows model name, uptime, token counts, and speeds
-
-import QtQuick 2.15
-import Quickshell 1.0
+import QtQuick
+import Quickshell
 import Quickshell.Io
-import "../Model.js" as Model
+import qs.Commons
+import qs.Ui
+import "Model.js" as Model
 
-Quickshell.Panel {
-    id: root
-    width: 320
-    height: 200
-    position: "top"
-    alignment: Qt.AlignHCenter
+Panel {
+  id: root
+  moduleName: "flyingpizza.llm-stats"
+  ipcTarget: ""
+  manageIpc: false
 
-    property var data: []
-    property string serverUrl: "http://localhost:5802"
+  property var snapshot: Model.emptySnapshot()
+  property var bar: null
+  property var settings: ({})
+  property var anchorItem: null
+  property var hostWidget: null
+  readonly property var barIdentity: hostWidget || root
 
-    // Properties to display current/maximum speed from the collect.py process
-    property number currentValue: 0
-    property number maximumValue: 1
-    property string showPrompt: "On"
-    property string showDecode: "On"
+  readonly property color foreground: bar ? bar.foreground : Color.popups.text
+  readonly property color accent: Color.accent
+  readonly property color urgent: bar ? bar.urgent : Color.urgent
+  readonly property color dim: Color.muted
+  readonly property string fontFamily: bar ? bar.fontFamily : Style.font.family
 
-    Column {
-        anchors {
-            fill: parent
-            margins: 16
-            spacing: 12
-        }
+  readonly property var barSettings: ({
+    showPrompt: Model.isOn(root.settings && root.settings.showPrompt !== undefined ? root.settings.showPrompt : "On", true),
+    showDecode: Model.isOn(root.settings && root.settings.showDecode !== undefined ? root.settings.showDecode : "On", true),
+    compact: true
+  })
+  readonly property var rows: Model.panelData(root.snapshot, root.barSettings)
 
-        // Header
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 8
-            Label {
-                text: "🤖"
-                font.pixelSize: 20
+  KeyboardPanel {
+    id: panel
+    anchorItem: root.anchorItem ? root.anchorItem : root
+    owner: root.barIdentity
+    bar: root.bar
+    open: root.opened
+    focusTarget: keyCatcher
+    contentWidth: panel.fittedContentWidth(Style.space(340))
+    contentHeight: panel.fittedContentHeight(column.implicitHeight)
+
+    PanelKeyCatcher {
+      id: keyCatcher
+      anchors.fill: parent
+      onCloseRequested: root.close()
+
+      Flickable {
+        id: scroll
+        anchors.fill: parent
+        contentWidth: width
+        contentHeight: column.implicitHeight
+        clip: true
+        boundsBehavior: Flickable.StopAtBounds
+        interactive: contentHeight > height
+
+        Column {
+          id: column
+          width: scroll.width
+          spacing: Style.space(10)
+
+          Row {
+            spacing: Style.space(8)
+
+            Text {
+              text: "🤖"
+              font.pixelSize: Style.font.title
+              anchors.verticalCenter: parent.verticalCenter
             }
-            Label {
-                text: "LLM Stats"
+
+            Text {
+              text: "LLM Stats"
+              color: root.foreground
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.title
+              font.bold: true
+              anchors.verticalCenter: parent.verticalCenter
+            }
+          }
+
+          PanelSeparator { foreground: root.foreground }
+
+          Repeater {
+            model: root.rows
+
+            Row {
+              required property var modelData
+              width: parent.width
+              spacing: Style.space(10)
+
+              Text {
+                text: modelData.label + ":"
+                color: root.dim
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
                 font.bold: true
-                font.pixelSize: 14
+                anchors.verticalCenter: parent.verticalCenter
+              }
+
+              Text {
+                text: (modelData.emoji ? modelData.emoji + "  " : "") + modelData.value
+                color: modelData.label === "Status" && modelData.value === "Offline"
+                     ? root.urgent : root.foreground
+                font.family: root.fontFamily
+                font.pixelSize: Style.font.bodySmall
+                anchors.verticalCenter: parent.verticalCenter
+              }
             }
+          }
+
+          Text {
+            width: parent.width
+            text: "Click or press Esc to close"
+            color: root.dim
+            font.family: root.fontFamily
+            font.pixelSize: Style.font.caption
+          }
         }
-
-        Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.topMargin: 8 }
-
-        // Model info
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 8
-            Label { text: "Model:"; font.bold: true; color: theme.muted }
-            Label {
-                text: root.data.length > 0 ? root.data[0].value : "—"
-                elide: Text.ElideMiddle
-                maximumLineCount: 1
-            }
-        }
-
-        // Status
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 8
-            Label { text: "Status:"; font.bold: true; color: theme.muted }
-            Label {
-                text: (root.data.length > 1 && root.data[1].emoji) ? root.data[1].emoji : ""
-                font.pixelSize: 16
-            }
-            Label {
-                text: root.data.length > 1 ? root.data[1].value : "—"
-                color: root.data.length > 1 && root.data[1].value === "Active"
-                       ? theme.accent : theme.urgent
-            }
-        }
-
-        // Uptime
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 8
-            Label { text: "Uptime:"; font.bold: true; color: theme.muted }
-            Label {
-                text: root.data.length > 2 ? root.data[2].value : "—"
-            }
-        }
-
-        Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.topMargin: 8 }
-
-        // Prompt stats
-        Label {
-            text: "Prompt Processing"
-            font.bold: true
-            font.pixelSize: 12
-            color: theme.accent
-        }
-
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 8
-            Label { text: "Tokens:"; font.bold: true; color: theme.muted }
-            Label {
-                text: root.data.length > 3 ? root.data[3].value : "—"
-            }
-        }
-
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 8
-            Label { text: "Speed:"; font.bold: true; color: theme.muted }
-            Label {
-                text: root.data.length > 4 ? root.data[4].value : "—"
-            }
-        }
-
-        Divider { anchors.left: parent.left; anchors.right: parent.right; anchors.topMargin: 8 }
-
-        // Decode stats
-        Label {
-            text: "Decoding"
-            font.bold: true
-            font.pixelSize: 12
-            color: theme.accent
-        }
-
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 8
-            Label { text: "Tokens:"; font.bold: true; color: theme.muted }
-            Label {
-                text: root.data.length > 5 ? root.data[5].value : "—"
-            }
-        }
-
-        Row {
-            anchors.horizontalCenter: parent.horizontalCenter
-            spacing: 8
-            Label { text: "Speed:"; font.bold: true; color: theme.muted }
-            Label {
-                text: root.data.length > 6 ? root.data[6].value : "—"
-            }
-        }
+      }
     }
-
-    Component.onCompleted: {
-        // Data is passed in via onClicked handler on the bar widget
-    }
-}
-
-// Process to run collect.py and poll its JSON output
-Process {
-    id: statsProcess
-    command: [
-        "python3",
-        Model.fileUrlToPath(%pluginDir%/collect.py),
-        "--server-url", root.serverUrl || "http://localhost:5802"
-    ]
-    stdout: StdioCollector {
-        waitForEnd: true
-        onStreamFinished: function(text) {
-            var raw = text
-            if (!raw.trim()) return
-
-            var data = JSON.parse(raw)
-            root.data = Model.panelData(data, {
-                showPrompt: root.showPrompt || "On",
-                showDecode: root.showDecode || "On"
-            })
-            if (data.prompt_speed !== undefined && data.prompt_speed >= 0) {
-                currentValue = data.prompt_speed
-                if (currentValue > maximumValue) {
-                    maximumValue = currentValue
-                }
-            } else if (data.decode_speed !== undefined && data.decode_speed >= 0) {
-                currentValue = data.decode_speed
-                if (currentValue > maximumValue) {
-                    maximumValue = currentValue
-                }
-            }
-        }
-    }
-
-    Timer {
-        id: timer
-        interval: 2000
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: {
-            statsProcess.start()
-        }
-    }
+  }
 }

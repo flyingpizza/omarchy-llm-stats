@@ -10,10 +10,14 @@ Defaults to http://localhost:5802 with 2 second polling
 """
 
 import json
+import re
+import subprocess
 import sys
 import time
+import urllib.parse
 import urllib.request
 import urllib.error
+from datetime import datetime, timezone
 
 
 def fetch_slots(server_url: str) -> list:
@@ -34,6 +38,86 @@ def fetch_slots(server_url: str) -> list:
         return None  # Signal connection error
     except json.JSONDecodeError:
         return []
+    except Exception:
+        return None
+
+
+def fetch_props(server_url: str) -> dict:
+    """Fetch /props from the llama.cpp server. Returns dict ({} on error)."""
+    try:
+        req = urllib.request.Request(f"{server_url}/props", method="GET")
+        req.add_header("Accept", "application/json")
+        with urllib.request.urlopen(req, timeout=3) as resp:
+            data = json.loads(resp.read().decode())
+            return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
+
+def model_name(props: dict):
+    """Short display name from /props (basename of the model path, .gguf stripped)."""
+    for key in ("model_alias", "model_path", "name"):
+        value = props.get(key)
+        if value and isinstance(value, str) and value.strip():
+            name = value.rsplit("/", 1)[-1]
+            if name.endswith(".gguf"):
+                name = name[: -len(".gguf")]
+            return name or None
+    return None
+
+
+_UPTIME_CACHE = {"cid": None, "started_ms": None}
+
+
+def _parse_rfc3339_nano(raw: str):
+    """Parse Docker's RFC3339Nano timestamp (e.g. 2026-10-07T15:40:12.123456789-04:00)."""
+    m = re.match(
+        r"(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d+))?(Z|[+-]\d{2}:?\d{2})?",
+        raw or "",
+    )
+    if not m:
+        return None
+    iso = m.group(1)
+    frac = (m.group(2) or "")[:6]
+    if frac:
+        iso += "." + frac.ljust(6, "0")
+    tz = m.group(3)
+    if tz == "Z":
+        iso += "+00:00"
+    elif tz:
+        iso += tz if ":" in tz else tz[:3] + ":" + tz[3:]
+    try:
+        return datetime.fromisoformat(iso)
+    except ValueError:
+        return None
+
+
+def server_uptime_ms(port: int):
+    """
+    Uptime of the local Docker container publishing `port` (the llama-server host).
+    Returns milliseconds since container start, or None if unavailable.
+    """
+    try:
+        out = subprocess.run(
+            ["docker", "ps", "--filter", f"publish={port}", "--format", "{{.ID}}"],
+            capture_output=True, text=True, timeout=5,
+        ).stdout.strip()
+        cid = out.splitlines()[0].strip() if out else None
+        if not cid:
+            return None
+        # Re-inspect only when the container changes (model swap)
+        if cid != _UPTIME_CACHE["cid"]:
+            raw = subprocess.run(
+                ["docker", "inspect", "--format", "{{.State.StartedAt}}", cid],
+                capture_output=True, text=True, timeout=5,
+            ).stdout.strip()
+            started = _parse_rfc3339_nano(raw)
+            if started is None:
+                return None
+            _UPTIME_CACHE["cid"] = cid
+            _UPTIME_CACHE["started_ms"] = int(started.timestamp() * 1000)
+        now_ms = int(time.time() * 1000)
+        return max(0, now_ms - _UPTIME_CACHE["started_ms"])
     except Exception:
         return None
 
@@ -101,7 +185,7 @@ def collect(server_url: str, interval: float = 2.0) -> dict:
     # Check if any slot is actively processing
     active_slots = sum(1 for s in slots2 if s.get("is_processing", False))
 
-    return {
+    result = {
         "prompt_tokens": current_prompt,
         "prompt_processed": counts2["total_prompt_processed"],
         "decode_tokens": current_decoded,
@@ -112,6 +196,22 @@ def collect(server_url: str, interval: float = 2.0) -> dict:
         "total_slots": len(slots2),
         "status": "ok" if active_slots > 0 or current_decoded > 0 else "idle"
     }
+
+    # Model name + server uptime (best-effort, never fail the snapshot)
+    name = model_name(fetch_props(server_url))
+    if name:
+        result["model"] = name
+    if "localhost" in server_url or "127.0.0.1" in server_url:
+        try:
+            port = urllib.parse.urlsplit(server_url).port
+        except ValueError:
+            port = None
+        if port:
+            up = server_uptime_ms(port)
+            if up is not None:
+                result["uptime_ms"] = up
+
+    return result
 
 
 def main():

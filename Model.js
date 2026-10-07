@@ -85,7 +85,6 @@ function parseSnapshot(raw) {
       } else if (data.model_path) {
         snapshot.model = String(data.model_path)
       }
-
       if (data.prompt_per_second !== undefined) {
         snapshot.prompt.per_second = Number(data.prompt_per_second)
       }
@@ -98,6 +97,15 @@ function parseSnapshot(raw) {
       if (data.decoded_n_tokens !== undefined) {
         snapshot.decode.n_tokens = Number(data.decoded_n_tokens)
       }
+    }
+
+    // Model + uptime: the new /slots-based collector also reports these
+    // (model from /props, uptime from the server's docker container)
+    if (!snapshot.model && data.model) {
+      snapshot.model = String(data.model)
+    }
+    if (snapshot.uptime_ms === null && data.uptime_ms !== undefined && data.uptime_ms !== null) {
+      snapshot.uptime_ms = Number(data.uptime_ms)
     }
 
     // Handle error case

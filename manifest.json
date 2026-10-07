@@ -26,7 +26,7 @@
     "allowMultiple": false,
     "defaultSection": "right",
     "defaults": {
-      "serverUrl": "http://localhost:5802",
+      "serverUrl": "http://localhost:5800",
       "refreshIntervalSec": 2,
       "showPrompt": true,
       "showDecode": true,
@@ -37,7 +37,7 @@
         "key": "serverUrl",
         "type": "string",
         "label": "llama.cpp server URL",
-        "defaultValue": "http://localhost:5802",
+        "defaultValue": "http://localhost:5800",
         "description": "Base URL of the running llama-server instance."
       },
       {

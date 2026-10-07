@@ -44,7 +44,7 @@ Click the plugin in the bar to open settings:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| Server URL | `http://localhost:5802` | Base URL of the llama-server |
+| Server URL | `http://localhost:5800` | Base URL of the llama-server |
 | Refresh interval | `2` seconds | How often to poll the server |
 | Show prompt speed | `On` | Display prompt processing throughput |
 | Show decode speed | `On` | Display token generation throughput |

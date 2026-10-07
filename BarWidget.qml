@@ -1,101 +1,144 @@
-// LLM Stats — Bar widget for omarchy shell
-// Displays real-time token generation speed from llama.cpp
-// Shows combined prompt + decode throughput with emoji
-
-import QtQuick 2.15
-import Quickshell 1.0
+import QtQuick
+import Quickshell
 import Quickshell.Io
-import "../Model.js" as Model
+import qs.Commons
+import qs.Ui
+import "Model.js" as Model
 
-// Panel — detail view opened on click
-Quickshell.Panel {
-    id: panel
-    // Panel dimensions and positioning are defined in Panel.qml
-}
+BarWidget {
+  id: root
+  moduleName: "flyingpizza.llm-stats"
 
-// Data source — polls collect.py periodically
-Process {
-    id: statsProcess
-    command: [
-        "python3",
-        Model.fileUrlToPath(%pluginDir%/collect.py),
-        "--server-url", settings.serverUrl || "http://localhost:5802"
-    ]
+  property var snapshot: Model.emptySnapshot()
+
+  readonly property int refreshSec: Math.max(1, parseInt(setting("refreshIntervalSec", 2), 10) || 2)
+  readonly property string serverUrl: setting("serverUrl", "http://localhost:5800")
+  readonly property bool showPrompt: Model.isOn(setting("showPrompt", "On"), true)
+  readonly property bool showDecode: Model.isOn(setting("showDecode", "On"), true)
+  readonly property bool compact: Model.isOn(setting("compact", "On"), true)
+  readonly property string collector: Model.fileUrlToPath(Qt.resolvedUrl("collect.py"))
+  readonly property var barDisplay: Model.formatCompactBar(root.snapshot, {
+    showPrompt: root.showPrompt,
+    showDecode: root.showDecode,
+    compact: root.compact
+  })
+  readonly property string barTooltip: Model.buildTooltip(root.snapshot, {
+    showPrompt: root.showPrompt,
+    showDecode: root.showDecode
+  })
+
+  function injectPanel() {
+    var target = panelLoader.item
+    if (!target) return
+    if ("bar" in target) target.bar = root.bar
+    if ("settings" in target) target.settings = root.settings
+    if ("anchorItem" in target) target.anchorItem = button
+    if ("hostWidget" in target) target.hostWidget = root
+    if ("snapshot" in target) target.snapshot = root.snapshot
+  }
+
+  function applySnapshot(raw) {
+    var next = Model.parseSnapshot(raw)
+    if (!next) return
+    root.snapshot = next
+    if (panelLoader.item && "snapshot" in panelLoader.item)
+      panelLoader.item.snapshot = next
+  }
+
+  function refresh() {
+    if (!collectProc.running) collectProc.running = true
+  }
+
+  readonly property bool opened: panelLoader.item ? panelLoader.item.opened === true : false
+
+  function open() {
+    if (panelLoader.item && panelLoader.item.open) panelLoader.item.open()
+  }
+
+  function close() {
+    if (panelLoader.item && panelLoader.item.close) panelLoader.item.close()
+  }
+
+  function togglePanel() {
+    if (panelLoader.item && panelLoader.item.toggle) panelLoader.item.toggle()
+  }
+
+  implicitWidth: button.implicitWidth
+  implicitHeight: button.implicitHeight
+  visible: root.barDisplay.text !== ""
+
+  onBarChanged: injectPanel()
+  onSettingsChanged: injectPanel()
+  onSnapshotChanged: injectPanel()
+
+  Process {
+    id: collectProc
+    command: ["python3", root.collector, "--server-url", root.serverUrl, "--interval", String(root.refreshSec)]
     stdout: StdioCollector {
-        waitForEnd: true
-        onStreamFinished: function(text) {
-            var raw = text
-            if (!raw.trim()) return
-
-            var snapshot = Model.parseSnapshot(raw)
-            if (snapshot && snapshot.ok) {
-                barData = snapshot
-            } else {
-                barData = Model.emptySnapshot()
-                barData.error = snapshot?.error || "Server unreachable"
-            }
-        }
+      waitForEnd: true
+      onStreamFinished: root.applySnapshot(text)
     }
+  }
 
-    Timer {
-        id: timer
-        interval: (Number(settings.refreshIntervalSec) || 2) * 1000
-        running: true
-        repeat: true
-        triggeredOnStart: true
-        onTriggered: {
-            barData = Model.getCompactBarData(barData, settings);
-        }
+  Timer {
+    interval: root.refreshSec * 1000
+    running: true
+    repeat: true
+    triggeredOnStart: true
+    onTriggered: root.refresh()
+  }
+
+  Loader {
+    id: panelLoader
+    active: true
+    source: Qt.resolvedUrl("Panel.qml")
+    visible: false
+    onLoaded: {
+      root.injectPanel()
+      Qt.callLater(root.injectPanel)
     }
-}
+  }
 
-// The visible bar widget
-Quickshell.BarWidget {
-    id: root
-    anchors.horizontalCenter: parent?.horizontalCenter ?? undefined
+  IpcHandler {
+    target: "flyingpizza.llm-stats"
 
-    property var barData: Model.emptySnapshot()
+    function refresh(): void { root.refresh() }
+    function open(): void { root.open() }
+    function close(): void { root.close() }
+    function show(): void { root.open() }
+    function hide(): void { root.close() }
+    function toggle(): void { root.togglePanel() }
+  }
 
-    // Get display data from Model.js
-    function getDisplayData() {
-        return Model.formatCompactBar(root.barData, {
-            showPrompt: settings.showPrompt ?? "On",
-            showDecode: settings.showDecode ?? "On",
-            compact: settings.compact ?? "On"
-        })
+  WidgetButton {
+    id: button
+    anchors.fill: parent
+    bar: root.bar
+    labelVisible: false
+    hasVisualContent: root.barDisplay.text !== ""
+    tooltipText: root.barTooltip
+    horizontalMargin: 8.75
+    verticalPadding: 8.75
+    fixedWidth: root.vertical ? -1 : Math.max(12, statsText.implicitWidth + scaledHorizontalMargin * 2)
+    fixedHeight: root.vertical ? Math.max(Style.bar.iconSlot, statsText.implicitHeight) : -1
+    useActiveColor: true
+    active: root.snapshot.error !== null
+
+    onPressed: function(b) { root.togglePanel() }
+
+    Row {
+      id: statsRow
+      anchors.centerIn: parent
+      spacing: Style.space(4)
+
+      Text {
+        id: statsText
+        text: root.barDisplay.text
+        color: button.active && button.useActiveColor ? button.activeColor : button.foreground
+        font.family: button.fontFamily
+        font.pixelSize: Style.font.body
+        anchors.verticalCenter: parent.verticalCenter
+      }
     }
-
-    displayText: getDisplayData().text
-    tooltipText: getDisplayData().tooltip
-
-    // Click opens detail panel
-    onClicked: {
-        panel.serverUrl = settings.serverUrl || "http://localhost:5802"
-        panel.data = Model.panelData(root.barData, {
-            showPrompt: settings.showPrompt ?? "On",
-            showDecode: settings.showDecode ?? "On"
-        })
-        panel.open()
-    }
-
-    // Theme-aware colors — follows omarchy accent system
-    Label {
-        anchors.fill: parent
-        text: root.displayText
-        font.family: "JetBrainsMono Nerd Font, JetBrainsMono NF"
-        font.pixelSize: root.fontSize
-        horizontalAlignment: Text.AlignHCenter
-        verticalAlignment: Text.AlignVCenter
-
-        // Dynamic color based on state
-        color: {
-            if (!root.barData.ok || root.barData.error)
-                theme.urgent
-            else if (root.barData.decode?.per_second !== null &&
-                     root.barData.decode.per_second > 40)
-                theme.accent
-            else
-                theme.muted
-        }
-    }
+  }
 }

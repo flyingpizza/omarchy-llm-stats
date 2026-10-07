@@ -172,41 +172,23 @@ function formatUptime(ms, emptyText) {
 }
 
 function formatCompactBar(snapshot, settings) {
-  var showPrompt = isOn(settings && settings.showPrompt, true)
-  var showDecode = isOn(settings && settings.showDecode, true)
-  var compact = isOn(settings && settings.compact, true)
-
-  var parts = []
-  var hasData = false
-
-  if (showPrompt) {
-    var speed = formatSpeed(snapshot.prompt.per_second, null)
-    if (speed !== "—" && Number(snapshot.prompt.per_second || 0) > 0) {
-      hasData = true
-      parts.push(compact ? speed + "p" : speed + " p/s")
-    }
-  }
-
-  if (showDecode) {
-    var dSpeed = formatSpeed(snapshot.decode.per_second, null)
-    if (dSpeed !== "—" && Number(snapshot.decode.per_second || 0) > 0) {
-      hasData = true
-      parts.push(compact ? dSpeed + "d" : dSpeed + " t/s")
-    }
-  }
-
+  // Bar shows a single t/s number only (decode preferred, prompt as fallback).
+  // Full detail (model, tokens, both speeds) goes to the mouseover tooltip.
   var status = getEmoji(snapshot)
 
-  if (!hasData && !snapshot.ok) {
+  var ps = Number(snapshot.decode && snapshot.decode.per_second || 0)
+  if (ps <= 0) ps = Number(snapshot.prompt && snapshot.prompt.per_second || 0)
+
+  if (ps > 0) {
+    var text = status.emoji + " " + Math.round(ps) + "t/s"
+    return { text: text, tooltip: buildTooltip(snapshot, settings), value: text, detail: status.label, emoji: status.emoji }
+  }
+
+  if (!snapshot.ok) {
     return { text: status.emoji, tooltip: "LLM server offline", value: status.emoji, detail: "offline", emoji: status.emoji }
   }
 
-  if (!hasData) {
-    return { text: status.emoji, tooltip: "No active generation", value: status.emoji, detail: "idle", emoji: status.emoji }
-  }
-
-  var text = status.emoji + " " + parts.join(" ")
-  return { text: text, tooltip: buildTooltip(snapshot, settings), value: parts.join("  "), detail: status.label, emoji: status.emoji }
+  return { text: status.emoji, tooltip: "No active generation", value: status.emoji, detail: "idle", emoji: status.emoji }
 }
 
 function buildTooltip(snapshot, settings) {

@@ -79,7 +79,7 @@
           "Off"
         ],
         "defaultValue": "On",
-        "description": "Compact shows '99p 30d', full shows '99p/s 30t/s'."
+        "description": "Bar shows a single t/s count; details appear in the mouseover tooltip and panel."
       }
     ],
     "hasPanel": true

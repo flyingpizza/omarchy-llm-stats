@@ -63,14 +63,19 @@ Click the plugin in the bar to open settings:
 
 ## Display Format
 
-### Bar (compact mode)
+### Bar
 ```
-🚀 99p 30d
+⚡ 30t/s
 ```
 
-### Bar (full mode)
+The bar shows a single t/s count only (decode speed, prompt speed as fallback). Mouse over for details:
+
 ```
-⚡ 99.0p/s 30.0t/s
+Model: Qwen3.6-35B
+Uptime: 1h 00m
+Active slots: 1/2
+Prompt: 29,895 tokens @ 99.4 t/s
+Decode: 944 tokens @ 30.2 t/s
 ```
 
 ### Click panel
